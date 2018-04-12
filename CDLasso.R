@@ -90,20 +90,20 @@ Y <- read.csv("y.csv", header = FALSE)
 colnames(Y) <- ("y")
 dataset <- cbind(X,Y)
 
-x<-model.matrix(y~ ., data = dataset)[,-401]
+x<-model.matrix(y~ ., data = dataset)[,-1]
 y <- dataset$y
 
 
 #### model test ####
 re.cd <- lasso.cd(x, y, rep(0, 400), 1) 
- re.cd.beta <- re.cd$beta[which(re$beta > "0")]
-re.en <- lasso.en(x,y,rep(0,400),lambda = 1,alpha = 1)
- re.en.beta <- re.en$beta[which(re.en$beta > "0")]
-fit <- glmnet(x, y, lambda = 1, standardize  = F, intercept = F)
+ re.cd.beta <- re.cd$beta[which(re.cd$beta != "0")]
+re.en <- lasso.en(x,y,rep(0,400),lambda = 1,alpha = 0.95)
+ re.en.beta <- re.en$beta[which(re.en$beta != "0")]
+fit <- glmnet(x, y, lambda = 1, alpha = 0.95, standardize  = F, intercept = F)
 re.glmnet <- as.numeric( coef(fit) )[-1]
- re.glmnet.beta <- re.glmnet[which(re.glmnet > "0")]
+ re.glmnet.beta <- re.glmnet[which(re.glmnet != "0")]
  
- result <- cbind(re.en.beta, re.en.beta, re.glmnet.beta )
+ result95 <- cbind(re.en.beta, re.en.beta, re.glmnet.beta )
  result
 
 
