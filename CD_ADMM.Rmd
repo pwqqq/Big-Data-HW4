@@ -64,7 +64,7 @@ EN_kkt_check <- function(X,y,beta,lambda, tol=1e-4){
 
 # Original beta may be wrong
 ```{r}
-EN.cd <- function(X,y,beta,lambda,alpha, tol=1e-6,maxiter=1000,quiet=FALSE){
+EN.cd <- function(X,y,beta,lambda,alpha, tol=1e-7,maxiter=100000,quiet=FALSE){
   # note that the LS part  in this function is the one in slides divided by length(y) = n 
   ## Or equivalently  lambda here = n * lambda in class
   beta <- as.matrix(beta); X <- as.matrix(X)
@@ -132,7 +132,6 @@ EN.cd1 <- function(X,y,beta,alpha = 0.95, tau ,tol=1e-7,maxiter=100000,quiet=FAL
 
 
 ```{r}
-re.EN <- as.matrix(coef(glmnet(X, y, lambda = 1,alpha = 0.95, standardize  = F, intercept = F))[-1])
 re.CD1 <- EN.cd1(X, y, rep(0, 400), alpha = 0.95, tau = 1*n)
 ```
 
