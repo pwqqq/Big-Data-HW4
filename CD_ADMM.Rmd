@@ -33,150 +33,13 @@ n <- nrow(X)
 softThresh <- function(x, lambda) {
   sign(x)*pmax(0, abs(x) - lambda)
 }
-
-soft_thresholding <- function(x,a){
-  ## This could be done more efficiently using vector multiplication
-  ## See the forumula in slides
-  ##  sign(x)*pmax(abs(x) - a, 0)
-  result <- numeric(length(x))
-  result[which(x > a)] <- x[which(x > a)] - a
-  result[which(x < -a)] <- x[which(x < -a)] + a
-  return(result)
-}
 ```
 
 
 ```{r}
-EN_kkt_check <- function(X,y,beta,lambda, tol=1e-4){
-  ## check convergence 
-  beta <- as.matrix(beta); X <- as.matrix(X)
-  ## Assuming no intercepts 
-  G <- t(X)%*%(y-X%*%beta)/length(y)
-  ix <- which(beta == 0 )
-  iy <- which(beta != 0)
-  if (any(abs(G[ix]) > (lambda + tol) )) { return(pass=0) }
-  if (any(abs( G[iy] - lambda*sign(beta[iy] ) ) > tol)) { return(pass=0) }  
-  return(pass=1)
-}
-```
-
-##CD Method##
-
-# Original beta may be wrong
-```{r}
-EN.cd <- function(X,y,beta,lambda,alpha, tol=1e-7,maxiter=100000,quiet=FALSE){
-  # note that the LS part  in this function is the one in slides divided by length(y) = n 
-  ## Or equivalently  lambda here = n * lambda in class
-  beta <- as.matrix(beta); X <- as.matrix(X)
-  obj <- numeric(length=(maxiter+1))
-  betalist <- list(length=(maxiter+1))
-  betalist[[1]] <- beta
-  
-  for (j in 1:maxiter){
-    for (k in 1:length(beta)){
-      r <- y - X[,-k]%*%beta[-k]
-      beta[k] <- (1/norm(as.matrix(X[,k]),"F")^2)*soft_thresholding(t(r)%*%X[,k],length(y)*alpha*lambda)/(1+lambda*(1-alpha))
-    }
-    betalist[[(j+1)]] <- beta
-    obj[j] <- (1/2)*(1/length(y))*norm(y - X%*%beta,"F")^2 + lambda*sum(abs(beta))
-    if (norm(betalist[[j]] - beta,"F") < tol) { break }
-  } 
-  check <- EN_kkt_check(X,y,beta,lambda) 
-  
-  if (quiet==FALSE){
-    if (check==1) {
-      cat(noquote("Minimum obtained.\n"))
-    }
-    else { cat(noquote("Minimum not obtained.\n")) } 
-  }
-  return(list(obj=obj[1:j],beta=beta)) 
-}
-```
-
-
-```{r}
-re.EN <- as.matrix(coef(glmnet(X, y, lambda = 1,alpha = 0.95, standardize  = F, intercept = F))[-1])
-
-re.CD <- EN.cd(X, y,beta = rep(0, 400), lambda = 1, alpha = 0.95)
-
-re.CD.beta <- re.CD$beta
-```
-
-
-```{r}
-
-EN.cd1 <- function(X,y,beta,alpha = 0.95, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
-
-  beta <- as.matrix(beta); X <- as.matrix(X)
-  obj <- numeric(length=(maxiter+1))
-  betalist <- list(length=(maxiter+1))
-  betalist[[1]] <- beta
-  
-  for (j in 1:maxiter){
-    for (k in 1:length(beta)){
-      
-      r <- y - X[,-k]%*%beta[-k]
-      
-      beta[k] <- (1/(base::norm(as.matrix(X[,k]),"F")^2 + (1-alpha)*tau))*softThresh(t(r)%*%X[,k],alpha*tau)
-    }
-    
-    betalist[[(j+1)]] <- beta
-    
-    if (norm(betalist[[j]] - beta,"F") < tol) { break }
-  } 
-  
-  return (beta) 
-}
-
-```
-
-
-```{r}
-re.CD1 <- EN.cd1(X, y, rep(0, 400), alpha = 0.95, tau = 1*n)
-```
-
-
-```{r}
-EN.cd2 <- function(X,y,beta,alpha = 0.95, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
-  
-  lambda2 <- tau*(1-alpha)
-  
-  I <- sqrt(lambda2)*diag(rep(1,length(beta)))
-  
-  Xnew <- as.matrix(rbind(X,I)/sqrt(1+lambda2))
-  
-  ynew <- rbind(y,as.matrix(rep(0,length(beta))))
-  
-  beta <- as.matrix(beta)
-  
-  obj <- numeric(length=(maxiter+1))
-  betalist <- list(length=(maxiter+1))
-  betalist[[1]] <- beta
-  
-  for (j in 1:maxiter){
-    for (k in 1:length(beta)){
-      
-      r <- ynew - Xnew[,-k]%*%beta[-k]
-      
-      beta[k] <- (1/norm(as.matrix(Xnew[,k]),"F")^2)*softThresh(t(r)%*%Xnew[,k],tau*alpha/sqrt(1+lambda2))
-    }
-    
-    betalist[[(j+1)]] <- beta
-    
-    if (norm(betalist[[j]] - beta,"F") < tol) { break }
-  } 
-  
-  return (beta/sqrt(1+lambda2)) 
-}
-```
-
-
-```{r}
-re.CD2 <- EN.cd2(X, y, rep(0, 400), alpha = 0.95, tau = 1*n)
-```
-
-
-```{r}
+## admmEN, admmEN2, EN.cd1 and EN.cd2 all follows the algorithm of Elastic Net
+## the four methods all return the same result 
+## choose admmEN here since its speed is much faster than the rest of methods
 
 admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {
   XX <- t(X) %*% X
@@ -188,6 +51,7 @@ admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {
   rho <- 4
   
   z0 <- z <- beta0 <- beta <- rep(0, p)
+  ## add tau*(1-alpha)
   Sinv <- solve(XX + tau*(1-alpha)*diag(rep(1, p)) + rho*diag(rep(1, p)))
   
   for (it in 1:maxit) {
@@ -276,13 +140,100 @@ admmEN2 <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {
 re.admm2 <- admmEN2(X, y, alpha = 0.95, tau = 1*n)
 ```
 
+
+```{r}
+EN.cd1 <- function(X,y,beta,alpha = 0.95, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
+
+  beta <- as.matrix(beta); X <- as.matrix(X)
+  betalist <- list(length=(maxiter+1))
+  betalist[[1]] <- beta
+  
+  for (j in 1:maxiter){
+    for (k in 1:length(beta)){
+      
+      r <- y - X[,-k]%*%beta[-k]
+      
+      beta[k] <- (1/(base::norm(as.matrix(X[,k]),"F")^2 + (1-alpha)*tau))*softThresh(t(r)%*%X[,k],alpha*tau)
+    }
+    
+    betalist[[(j+1)]] <- beta
+    
+    if (norm(betalist[[j]] - beta,"F") < tol) { break }
+  } 
+  
+  return (beta) 
+}
+
+```
+
+
+```{r}
+re.CD1 <- EN.cd1(X, y, rep(0, 400), alpha = 0.95, tau = 1*n)
+```
+
+
+```{r}
+EN.cd2 <- function(X,y,beta,alpha = 0.95, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
+  
+  lambda2 <- tau*(1-alpha)
+  
+  I <- sqrt(lambda2)*diag(rep(1,length(beta)))
+  
+  Xnew <- as.matrix(rbind(X,I)/sqrt(1+lambda2))
+  
+  ynew <- rbind(y,as.matrix(rep(0,length(beta))))
+  
+  beta <- as.matrix(beta)
+  
+  obj <- numeric(length=(maxiter+1))
+  betalist <- list(length=(maxiter+1))
+  betalist[[1]] <- beta
+  
+  for (j in 1:maxiter){
+    for (k in 1:length(beta)){
+      
+      r <- ynew - Xnew[,-k]%*%beta[-k]
+      
+      beta[k] <- (1/norm(as.matrix(Xnew[,k]),"F")^2)*softThresh(t(r)%*%Xnew[,k],tau*alpha/sqrt(1+lambda2))
+    }
+    
+    betalist[[(j+1)]] <- beta
+    
+    if (norm(betalist[[j]] - beta,"F") < tol) { break }
+  } 
+  
+  return (beta/sqrt(1+lambda2)) 
+}
+```
+
+
+```{r}
+re.CD2 <- EN.cd2(X, y, rep(0, 400), alpha = 0.95, tau = 1*n)
+```
+
+
 # Calculate difference
 ```{r}
+re.EN <- as.matrix(coef(glmnet(X, y, lambda = 1,alpha = 0.95, standardize  = F, intercept = F))[-1])
 
-base::norm(re.CD.beta-re.EN,"F")
 base::norm(re.CD1-re.EN,"F")
 base::norm(re.CD2-re.EN,"F")
 base::norm(re.admm-re.EN,"F")
 base::norm(re.admm2-re.EN,"F")
 ```
+```{r}
+betamat <-  cbind(re.admm, re.EN)
+betamat
 
+## objective function value
+obj <- function(beta, X, y, tau, alpha) {
+    0.5*base::norm(y - X%*%beta, "F")**2 + tau*sum(abs(beta))
+}
+
+apply(betamat, 2, function(b) obj(b, X, y, 1*n, alpha = 1))
+
+
+
+
+
+```
