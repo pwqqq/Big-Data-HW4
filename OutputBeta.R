@@ -86,7 +86,7 @@ write.csv(beta1, "b1.csv", row.names = FALSE)
 ############################## Q2 ##############################
 ## Set alpha = 1
 beta2 <- OutputBeta(X,y,alpha = 1, Lseq)
-write.csv(beta1, "b2.csv", row.names = FALSE)
+write.csv(beta2, "b2.csv", row.names = FALSE)
 
 
 ############################## DISCUSSION ##############################
