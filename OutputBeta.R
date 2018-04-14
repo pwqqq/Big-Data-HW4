@@ -3,6 +3,7 @@ authors <- function() {
 }
 
 ## Install packages 
+install.packages("glmnet")
 library(glmnet)
 
 ## Import dataset 
@@ -19,36 +20,35 @@ softThresh <- function(x, lambda) {
   sign(x)*pmax(0, abs(x) - lambda)
 }
 
-## admmEN 
-admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {
+###### Use ADMM algorithm and write function admmEN to estimate beta ######
+
+admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {# tau = n*lambda
   XX <- t(X) %*% X
   Xy <- t(X) %*% y
   
-  p <- ncol(X)
-  L <- rep(0, p)
-  maxRho <- 5
-  rho <- 4
+  p <- ncol(X) # number of variables
+  L <- rep(0, p) # initialize Lagrange multiplier
+  rho <- 4 
   
   z0 <- z <- beta0 <- beta <- rep(0, p)
-  ## add tau*(1-alpha)
+  
+  ## Compared to ADMMLasso, add tau*(1-alpha)*diag(rep(1, p)) because of the L2 regularization
   Sinv <- solve(XX + tau*(1-alpha)*diag(rep(1, p)) + rho*diag(rep(1, p)))
   
   for (it in 1:maxit) {
     ## update beta
-    ## beta <- solve(XX + rho*diag(rep(1, p)) ) %*% (Xy + rho * z - lambda)
+    ## beta <- solve(XX + tau*(1-alpha)*diag(rep(1, p)) + rho*diag(rep(1, p)) ) %*% (Xy + rho * z - lambda)
     beta <- Sinv %*% (Xy + rho * z - L)
     
     ## update z
-    z <- softThresh(beta + L/rho, tau*alpha/rho)
+    z <- softThresh(beta + L/rho, tau*alpha/rho) # Compared to tau/rho lasso, here we multiply it by alpha  
     
-    ## update lambda
+    ## update Lagrange multiplier
     L <- L + rho* (beta - z) 
-    ## increase rho
-    ## rho <- min(maxRho, rho*1.1)
     
     change <- max(  c( base::norm(beta - beta0, "F"),
                        base::norm(z - z0, "F") ) )
-    if (change < tol || it > maxit) {
+    if (change < tol || it > maxit) { # Check convergence
       break
     }
     beta0 <-  beta
@@ -58,7 +58,8 @@ admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {
   z
 }
 
-# Write a function to output beta as csv file
+###### Write a function to output beta as csv file ######
+
 OutputBeta <- function(X, y, alpha, lambda){
   # Create null matrix
   beta <- matrix(NA,nrow = ncol(X), ncol = length(lambda))
@@ -93,7 +94,7 @@ write.csv(beta1, "b2.csv", row.names = FALSE)
 ## all the methods return same results with same alpha and lambda
 ## chose admm becasue admm is much faster than cd algorithm  
 
-## ADMM2
+## ADMM2 - estimate beta by construct an artificial data set (ynew, Xnew)
 admmEN2 <- function(X, y, tau, alpha, maxit = 10000, tol=1e-7) {
   
   lambda2 <- tau*(1-alpha)
@@ -124,10 +125,8 @@ admmEN2 <- function(X, y, tau, alpha, maxit = 10000, tol=1e-7) {
     ## update z
     z <- softThresh(beta + L/rho, tau*alpha/(sqrt(1+lambda2)*rho))
     
-    ## update lambda
+    ## update Lagrange multiplier
     L <- L + rho* (beta - z) 
-    ## increase rho
-    ## rho <- min(maxRho, rho*1.1)
     
     change <- max(  c( base::norm(beta - beta0, "F"),
                        base::norm(z - z0, "F") ) )
@@ -142,7 +141,7 @@ admmEN2 <- function(X, y, tau, alpha, maxit = 10000, tol=1e-7) {
 }
 
 ## CD1
-EN.cd1 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
+EN.cd1 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){# tau = n*lambda
   
   beta <- as.matrix(beta); X <- as.matrix(X)
   betalist <- list(length=(maxiter+1))
@@ -164,7 +163,7 @@ EN.cd1 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
   return (beta) 
 }
 
-## CD2
+## CD2 - estimate beta by construct an artificial data set (ynew, Xnew)
 EN.cd2 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
   
   lambda2 <- tau*(1-alpha)
@@ -200,26 +199,38 @@ EN.cd2 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
 
 ## We could then use two methods to test the difference between the estimated coefficients
 ## First, we could use norm to test the difference between two coefficient vectors, and comparing the result with glmnet package
-## For example, set alpha equal 0.95
-re.admm <- admmEN(X, y, alpha = 0.95, tau = 1*n)
+## For example, set alpha = 0.95 and lambda = 10
+re.admm <- admmEN(X, y, alpha = 0.95, tau = 10*n)
 ## use glmnet package to test the result
-## set standardize equal FALSE 
+## change default argument in glmnet to solve problems here: Set standardize and intercept equal FALSE 
 ## so we could plug in the original dataset directly
-re.EN <- as.matrix(coef(glmnet(X, y, lambda = 1,alpha = 0.95, standardize  = F, intercept = F))[-1])
+re.EN <- as.matrix(coef(glmnet(X, y, lambda = 10, alpha = 0.95, standardize  = F, intercept = F))[-1])
 ## use norm to test the difference between beta vectors
 base::norm(re.admm-re.EN,"F")
 
 ## Second, we could the estimated objective to test the estimation accuracy following the function that Dr.Luo shows on the hw4
-## Use the estimated results with glmnet estimated results
+## Multiply the objective function by n. And set tau = n*lambda. We write the following obj function:
+
 obj <- function(beta, X, y, tau,alpha) {
-  1/2*base::norm(y - X%*%beta, "F")^2 + 0.5*tau*(1-alpha)*norm(beta,"F")^2 + tau*alpha*sum(abs(beta))
+  1/2*base::norm(y - X%*%beta, "F")^2 + 0.5*tau*(1-alpha)*base::norm(beta,"F")^2 + tau*alpha*sum(abs(beta))
 }
 
 ## In this case, when alpha is 1, which is the lasso regression, the results are the same with glmnet package
-## Also, when lambda is 0.01 and alpha is 0.95, the results are also very close
-## Although not perfectly match, 
-## the results of the functions above are all smaller than or equal to the result of glmnet package with small differences
+## You can run the following codes to test the lasso situation:
+
+# re.admm_l <- admmEN(X, y, alpha = 1, tau = 1*n)
+# re.EN_l <- as.matrix(coef(glmnet(X, y, lambda = 1,alpha = 1, standardize  = F, intercept = F))[-1])
+
+# obj_admm <- obj(re.admm_l, X, y, tau = 1*n, alpha = 1)
+# obj_glmnet <- obj(re.EN_l, X, y, tau = 1*n, alpha = 1)
+
+## You will get the same result as 1300.847.
 
 
+## Also, when lambda is 0.01 and alpha is 0.95, the results are also very close.
+## Although not perfectly match.
+## Conclusion:the results returned from obj function using admm estimated beta 
+## are all smaller than or equal to the results using beta from glmnet function.
+## And the difference is small.
 
 
