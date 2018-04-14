@@ -41,7 +41,7 @@ admmEN <- function(X, y, tau, alpha=0.95, maxit = 10000, tol=1e-7) {# tau = n*la
     beta <- Sinv %*% (Xy + rho * z - L)
     
     ## update z
-    z <- softThresh(beta + L/rho, tau*alpha/rho) # Compared to tau/rho lasso, here we multiply it by alpha  
+    z <- softThresh(beta + L/rho, tau*alpha/rho) # Compared to tau/rho in lasso, here we multiply it by alpha  
     
     ## update Lagrange multiplier
     L <- L + rho* (beta - z) 
@@ -202,7 +202,7 @@ EN.cd2 <- function(X,y,beta,alpha, tau ,tol=1e-7,maxiter=100000,quiet=FALSE){
 ## For example, set alpha = 0.95 and lambda = 10
 re.admm <- admmEN(X, y, alpha = 0.95, tau = 10*n)
 ## use glmnet package to test the result
-## change default argument in glmnet to solve problems here: Set standardize and intercept equal FALSE 
+## change default arguments in glmnet to solve problems here: Set standardize and intercept equal FALSE 
 ## so we could plug in the original dataset directly
 re.EN <- as.matrix(coef(glmnet(X, y, lambda = 10, alpha = 0.95, standardize  = F, intercept = F))[-1])
 ## use norm to test the difference between beta vectors
